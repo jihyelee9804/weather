@@ -26,6 +26,8 @@ dependencies {
 	// jdbc
 	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // json 파싱
+	implementation 'com.googlecode.json-simple:json-simple:1.1.1'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
