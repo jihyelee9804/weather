@@ -12,7 +12,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest // 테스트코드임을 알려준다.
-@Transactional // 테스트 동작이 종료되면 테스트 중에 사용되었던 쿼리기록을 삭제해서 DB에는 변화가 없다.
+@Transactional // 테스트코드에 있는 @Transactional은 하위 메소드들이 작동했을 때 커밋되지 않고 롤백해서 DB에는 변화가 없다.
 class JpaMemoRepositoryTest {
 
     @Autowired

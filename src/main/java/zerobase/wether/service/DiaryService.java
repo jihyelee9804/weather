@@ -4,9 +4,17 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
+import zerobase.wether.WetherApplication;
+import zerobase.wether.domain.DateWeather;
 import zerobase.wether.domain.Diary;
+import zerobase.wether.repository.DateWeatherRepository;
 import zerobase.wether.repository.DiaryRepository;
 
 import java.io.BufferedReader;
@@ -19,40 +27,75 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@Transactional
 public class DiaryService {
     // openweathermap.key 를 가져와서 apiKey에 저장한다.
     @Value("${openweathermap.key}")
     private String apiKey;
 
     private final DiaryRepository diaryRepository;
+    private final DateWeatherRepository dateWeatherRepository;
+    private static final Logger logger = LoggerFactory.getLogger(WetherApplication.class);
 
     // DiaryService가 생성될 때 diaryRepository를 가져온다.
-    public DiaryService(DiaryRepository diaryRepository) {
+    public DiaryService(DiaryRepository diaryRepository, DateWeatherRepository dateWeatherRepository) {
         this.diaryRepository = diaryRepository;
+        this.dateWeatherRepository = dateWeatherRepository;
     }
 
+    @Transactional
+    @Scheduled(cron = "0 0 1 * * *")
+//    @Scheduled(cron = "0/5 * * * * *") // 매분 매시 0초부터 5초 간격으로 해당 함수가 동작하도록 스케줄링한다.
+    public void saveWeatherDate() {
+        dateWeatherRepository.save(getWeatherFromApi());
+    }
 
     // 접근제어자가 public인 이유: Controller에서 의존성을 주입받아야하는데 서로 다른 패키지에 있기 때문이다.
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public void createDiary(LocalDate date, String text) {
+        logger.error("error test");
+        logger.info("started to create diary");
+        // 날씨 데이터 가져오기 (API에서 가져오기 or DB에서 가져오기)
+        DateWeather dateWeather = getDateWeather(date);
+
+        // 파싱된 데이터 + 일기 값 DB에 넣기
+        Diary nowdiary = new Diary();
+        nowdiary.setDateWeather(dateWeather);
+        nowdiary.setText(text);
+        diaryRepository.save(nowdiary);
+        logger.info("end to create diary");
+    }
+
+    private DateWeather getWeatherFromApi() {
         // open weather map에서 날씨 데이터 가져오기
         String weatherData = getWeatherString();
 
         // 받아온 날씨 json 파싱하기
         Map<String, Object> parsedWeather = parseWeather(weatherData);
-
-        // 파싱된 데이터 + 일기 값 DB에 넣기
-        Diary nowdiary = new Diary();
-        nowdiary.setWeather(parsedWeather.get("main").toString());
-        nowdiary.setIcon(parsedWeather.get("icon").toString());
-        nowdiary.setTemperature((Double) parsedWeather.get("temp"));
-        nowdiary.setText(text);
-        nowdiary.setDate(date);
-        diaryRepository.save(nowdiary);
+        DateWeather dateWeather = new DateWeather();
+        dateWeather.setDate(LocalDate.now());
+        dateWeather.setWeather(parsedWeather.get("main").toString());
+        dateWeather.setIcon(parsedWeather.get("icon").toString());
+        dateWeather.setTemperature((double)parsedWeather.get("temp"));
+        return dateWeather;
     }
 
+    private DateWeather getDateWeather(LocalDate date) {
+        List<DateWeather> dateWeatherListFromDB = dateWeatherRepository.findAllByDate(date);
+        if (dateWeatherListFromDB.size() == 0) {
+            // 새로 api에서 날씨 정보를 가져와야 한다.
+            // 정책상 현재 날씨를 가져오도록 하거나, 날씨없이 일기를 쓰도록 한다.
+            return getWeatherFromApi();
+        } else {
+            return dateWeatherListFromDB.get(0);
+        }
+    }
+    @Transactional(readOnly = true)
     public List<Diary> readDiary(LocalDate date) {
+        logger.debug("read diary");
         return diaryRepository.findAllByDate(date);
     }
+
 
     public List<Diary> readDiaries(LocalDate startDate, LocalDate endDate) {
         return diaryRepository.findAllByDateBetween(startDate, endDate);
